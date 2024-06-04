@@ -331,7 +331,7 @@ class BertAndGraphModel(BertPreTrainedModel):
                                         nn.Dropout(p=local_config.structure_encoder.trans_dp)
                                      )
         # For label attention
-        if local_config.label:
+        if hasattr(local_config, "label") and local_config.label:
             self.label_type = local_config.label_type
             self.label_dict = torch.load(os.path.join(local_config.data_dir, local_config.dataset, 'bert_value_dict.pt'))
             self.label_dict = {i: self.tokenizer.decode(v) for i, v in self.label_dict.items()}
@@ -434,7 +434,7 @@ class BertAndCodingTreeModel(BertAndGraphModel):
         for layer in range(1, self.local_config.tree_depth+1):
             tree['treePHLayer%s' % layer] = torch.ones([nodeSize[layer], 1])  # place holder
             tree['treeEdgeMatLayer%s' % layer] = torch.LongTensor(edgeMat[layer]).T
-        fb_keys = [key for key in tree.keys if key.find('treePHLayer') >= 0]
+        fb_keys = [key for key in tree.keys() if key.find('treePHLayer') >= 0]
         return tree, fb_keys
 
     def align_tree(self, embeds, batch_size):

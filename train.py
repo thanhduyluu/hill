@@ -15,6 +15,8 @@ from model.contrast import ContrastModel, StructureContrast, GraphContrast
 
 import utils
 import arg_parser
+import time
+import datetime
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -183,7 +185,9 @@ def run_train(config, train_set, dev_set):
     best_score_macro = 0.0
     best_score_micro = 0.0
     early_stop_count = 0
-
+    est = 1000
+    total_step = config.train.epoch * len(train_set)
+    current_step = total_step
     for epoch in range(config.train.epoch):
         if early_stop_count >= config.train.early_stop:
             print("Early stop!")
@@ -191,19 +195,22 @@ def run_train(config, train_set, dev_set):
         model.train()
         loss = 0.0
         # -------------Train-----------------------------
-        for data, label, idx in train_set:
+        for index, (data, label, idx) in enumerate(train_set):
+            current_step = current_step - 1
+            t = time.time()
             padding_mask = data != tokenizer.pad_token_id
             output = model(data, padding_mask, labels=label, return_dict=True, )
             loss += output['loss'].item()
-
             bert_optimizer.zero_grad()
             hill_optimizer.zero_grad()
 
             output['loss'].backward()
-
             bert_optimizer.step()
             hill_optimizer.step()
             torch.cuda.empty_cache()  # For nyt batch=24
+            est = time.time() - t
+            es = est * current_step
+            print(f"Step: {total_step - current_step}/{total_step} Epoch: {epoch}/{config.train.epoch}, Train: {index}/{len(train_set)}, Loss: {float(output['loss'])} -- Estimate time: {datetime.timedelta(seconds=int(es*1.3))}, Current time:{datetime.datetime.now()}")
         loss = loss / len(train_set) * config.batch_size
         if args.wandb:
             wandb.log({'train_loss': loss})
@@ -259,8 +266,8 @@ if __name__ == '__main__':
     print(args)
     config = utils.Configure(config_json_file=os.path.join(args.cfg_dir, args.model_name + '.json'))
 
-    bert_file = "/YOUR_BERT_DIR/bert-base-uncased"  # For offline.
-    # bert_file = 'bert-base-uncased'  # For online.
+    # bert_file = "/YOUR_BERT_DIR/bert-base-uncased"  # For offline.
+    bert_file = 'bert-base-uncased'  # For online.
     tokenizer = AutoTokenizer.from_pretrained(bert_file)
     data_path = os.path.join(args.data_dir, args.dataset)
     label_dict = torch.load(os.path.join(data_path, 'bert_value_dict.pt'))
@@ -273,7 +280,6 @@ if __name__ == '__main__':
         'gclr': GraphContrast,  # Ablation model
     }
     device = config.device_setting.device
-
     dataset = BertDataset(device=device, pad_idx=tokenizer.pad_token_id, data_path=data_path)
     split = torch.load(os.path.join(data_path, 'split.pt'))
 
@@ -283,6 +289,7 @@ if __name__ == '__main__':
 
     # params_and_time(config, train, test)
 
+    # print("=============================================Debug=============================================")
     # ------------Run once----------------------
     utils.seed_torch(args.seed)
     if len(args.name) == 0:

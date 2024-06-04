@@ -122,7 +122,7 @@ def split_train_dev_test():
     f = open('wos_total.json', 'r')
     data = f.readlines()
     f.close()
-    id = [i for i in range(46985)]
+    id = [i for i in range(46984)]
     np_data = np.array(data)
     np.random.shuffle(id)
     np_data = np_data[id]

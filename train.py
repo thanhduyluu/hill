@@ -169,7 +169,7 @@ def run_train(config, train_set, dev_set):
         import wandb
         wandb.init(config=config, project='htc')
         wandb.watch(model)
-    debug(model)
+    # debug(model)
     train_set = DataLoader(train_set, batch_size=config.batch_size, shuffle=True, collate_fn=dataset.collate_fn)
     dev_set = DataLoader(dev_set, batch_size=config.batch_size, shuffle=False, collate_fn=dataset.collate_fn)
 
@@ -288,7 +288,7 @@ if __name__ == '__main__':
     }
     device = config.device_setting.device
     dataset = BertDataset(device=device, pad_idx=tokenizer.pad_token_id, data_path=data_path)
-    debug(dataset)
+    # debug(dataset)
     split = torch.load(os.path.join(data_path, 'split.pt'))
 
     train = Subset(dataset, split['train'])

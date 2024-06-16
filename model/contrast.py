@@ -445,7 +445,7 @@ class BertAndCodingTreeModel(BertAndGraphModel):
 
     def align_tree(self, embeds, batch_size):
         batch_tree = [copy.deepcopy(self.tree) for _ in range(batch_size)]
-        debug(self.tree)
+        # debug(self.tree)
         for i in range(batch_size):
             batch_tree[i].x = embeds[i]
         return batch_tree
@@ -510,15 +510,15 @@ class StructureContrast(BertAndCodingTreeModel):
         pooled_cls_embed = self.text_drop(self.bert_pool(hidden_states))
 
         batch_size = hidden_states.shape[0]
-        debug(hidden_states.shape)
+        # debug(hidden_states.shape)
         loss = 0
         contrast_logits = None
         text_embeds = self.batch_duplicate(pooled_cls_embed)
-        debug(text_embeds.shape)
+        # debug(text_embeds.shape)
         batch_tree = self.align_tree(text_embeds, batch_size)
-        debug(len(batch_tree))
+        # debug(len(batch_tree))
         tree_loader = DataLoader(batch_tree, batch_size=batch_size, follow_batch=self.fb_keys)
-        debug(tree_loader)
+        # debug(tree_loader)
         contrast_output = self.structure_encoder(next(iter(tree_loader)))
 
         if self.output_type == 'tree':

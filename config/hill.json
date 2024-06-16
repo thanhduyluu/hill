@@ -11,7 +11,7 @@
   },
   "train": {
     "bert_lr": 3e-5,
-    "epoch": 20,
+    "epoch": 50,
     "early_stop": 10,
     "update": 1,
     "warmup": true,

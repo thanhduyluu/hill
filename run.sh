@@ -1,0 +1,1 @@
+python train.py -d wos -mn hill -s 0 -b 3 -lr 1e-3 -k 3 -l 1e-3 -hd 512 -tp sum -ho tree

@@ -11,7 +11,7 @@ from collections import defaultdict
 np.random.seed(7)
 
 if __name__ == '__main__':
-    model = 'all-mpnet-base-v2'
+    model = 'google-t5/t5-small'  # For online.
     # model = 'bert-base-uncased'
     tokenizer = AutoTokenizer.from_pretrained(model)
     source = []

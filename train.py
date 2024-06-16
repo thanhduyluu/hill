@@ -94,7 +94,6 @@ def params_and_time(config, train_set, test_set, num_epochs=20):
     """
     Experiments for parameters and training time (Figure 4)
     """
-    from thop import clever_format
     config.update(vars(args))
 
     model = MODELS[config.model_name].from_pretrained(bert_file, num_labels=num_class, local_config=config)
@@ -103,6 +102,7 @@ def params_and_time(config, train_set, test_set, num_epochs=20):
     train_set = DataLoader(train_set, batch_size=config.batch_size, shuffle=True, collate_fn=dataset.collate_fn)
     test_set = DataLoader(test_set, batch_size=config.batch_size, shuffle=False, collate_fn=dataset.collate_fn)
 
+    from thop import clever_format
     num_params = sum(p.numel() for n, p in model.named_parameters() if 'bert' not in n)
     num_params = clever_format([num_params], "%.4f")
     print("Trainable parameters: {}.".format(num_params))
@@ -194,6 +194,10 @@ def run_train(config, train_set, dev_set):
     est = 1000
     total_step = config.train.epoch * len(train_set)
     current_step = total_step
+    from thop import clever_format
+    num_params = sum(p.numel() for n, p in model.named_parameters() if 'bert' not in n)
+    num_params = clever_format([num_params], "%.4f")
+    print("Trainable parameters: {}.".format(num_params))
     for epoch in range(config.train.epoch):
         if early_stop_count >= config.train.early_stop:
             print("Early stop!")

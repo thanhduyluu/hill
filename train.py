@@ -1,3 +1,4 @@
+from torch import nn
 from transformers import AutoTokenizer
 
 '''
@@ -198,6 +199,14 @@ def run_train(config, train_set, dev_set):
     num_params = sum(p.numel() for n, p in model.named_parameters() if 'bert' not in n)
     num_params = clever_format([num_params], "%.4f")
     print("Trainable parameters: {}.".format(num_params))
+    debug(model)
+    def initialize_weights(m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.kaiming_uniform_(m.weight)
+            if m.bias is not None:
+                m.bias.data.fill_(0.01)
+    model.apply(initialize_weights)
+
     for epoch in range(config.train.epoch):
         if early_stop_count >= config.train.early_stop:
             print("Early stop!")
@@ -230,6 +239,7 @@ def run_train(config, train_set, dev_set):
         with torch.no_grad():
             truth = []
             pred = []
+            a = 0
             for data, label, idx in dev_set:
                 padding_mask = data != tokenizer.pad_token_id
                 output = model(data, padding_mask, labels=label, return_dict=True, )
@@ -241,7 +251,9 @@ def run_train(config, train_set, dev_set):
                     truth.append(t)
                 for l in output['logits']:
                     pred.append(torch.sigmoid(l).tolist())
-
+                # a +=1
+                # if a > 10:
+                #     break
         scores = evaluate(pred, truth, label_dict)
         macro_f1 = scores['macro_f1']
         micro_f1 = scores['micro_f1']
@@ -277,7 +289,7 @@ if __name__ == '__main__':
     config = utils.Configure(config_json_file=os.path.join(args.cfg_dir, args.model_name + '.json'))
 
     # bert_file = "/YOUR_BERT_DIR/bert-base-uncased"  # For offline.
-    bert_file = 'google-t5/t5-small'  # For online.
+    bert_file = 'google-t5/t5-base'  # For online.
     # bert_file = 'bert-base-uncased'  # For online.
     tokenizer = AutoTokenizer.from_pretrained(bert_file)
     data_path = os.path.join(args.data_dir, args.dataset)

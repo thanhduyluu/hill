@@ -315,6 +315,9 @@ class BertAndGraphModel(T5PreTrainedModel):
         self.tokenizer = AutoTokenizer.from_pretrained(config.name_or_path)
         self.text_drop = nn.Dropout(config.dropout_rate)
         self.bert = T5EncoderModel(config)
+        # import loralib as lora
+        # lora.mark_only_lora_as_trainable(self.bert)
+        # self.lora_layer = lora.Linear(config.hidden_size, config.hidden_size, r=16)
         self.bert_pool = BertPoolingLayer('cls')
         self.structure_encoder = None
 
@@ -338,7 +341,8 @@ class BertAndGraphModel(T5PreTrainedModel):
         # For label attention
         if hasattr(local_config, "label") and local_config.label:
             self.label_type = local_config.label_type
-            self.label_dict = torch.load(os.path.join(local_config.data_dir, local_config.dataset, 'bert_value_dict.pt'))
+            self.label_dict = torch.load(
+                os.path.join(local_config.data_dir, local_config.dataset, 'bert_value_dict.pt'))
             self.label_dict = {i: self.tokenizer.decode(v) for i, v in self.label_dict.items()}
             self.label_name = []
             for i in range(len(self.label_dict)):
@@ -472,10 +476,11 @@ class StructureContrast(BertAndCodingTreeModel):
                                        nn.ReLU(inplace=True),
                                        nn.Linear(local_config.contrast.proj_dim, local_config.contrast.proj_dim)
                                        )
-        self.tree_proj = nn.Sequential(nn.Linear(local_config.structure_encoder.output_dim, local_config.contrast.proj_dim),
-                                       nn.ReLU(inplace=True),
-                                       nn.Linear(local_config.contrast.proj_dim, local_config.contrast.proj_dim)
-                                       )
+        self.tree_proj = nn.Sequential(
+            nn.Linear(local_config.structure_encoder.output_dim, local_config.contrast.proj_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(local_config.contrast.proj_dim, local_config.contrast.proj_dim)
+            )
         self.node_mask = nn.Parameter(torch.randn(local_config.hidden_dim))
         self.init_weights()  # Warning! This is NOT training BERT from scratch
 
@@ -510,7 +515,6 @@ class StructureContrast(BertAndCodingTreeModel):
         pooled_cls_embed = self.text_drop(self.bert_pool(hidden_states))
 
         batch_size = hidden_states.shape[0]
-        # debug(hidden_states.shape)
         loss = 0
         contrast_logits = None
         text_embeds = self.batch_duplicate(pooled_cls_embed)
@@ -529,16 +533,17 @@ class StructureContrast(BertAndCodingTreeModel):
             logits = self.classifier(torch.cat([pooled_cls_embed, contrast_output], dim=1))  # [bert, hill]
         else:
             logits = self.classifier(pooled_cls_embed)  # bert
-
+        self.multi_label = True
         if labels is not None:
             if self.training:
                 if not self.multi_label:
                     loss_fct = CrossEntropyLoss()
                     target = labels.view(-1)
+                    loss += loss_fct(logits.view(-1), target)
                 else:
                     loss_fct = nn.BCEWithLogitsLoss()
                     target = labels.to(torch.float32)
-                if self.cls_loss:
+
                     loss += loss_fct(logits.view(-1, self.num_labels), target)
                 if self.contrast_loss:
                     contrastive_loss = self.contrastive_lossfct(
@@ -579,10 +584,11 @@ class GraphContrast(BertAndGraphModel):
                                        nn.ReLU(inplace=True),
                                        nn.Linear(local_config.contrast.proj_dim, local_config.contrast.proj_dim)
                                        )
-        self.graph_proj = nn.Sequential(nn.Linear(local_config.structure_encoder.output_dim, local_config.contrast.proj_dim),
-                                        nn.ReLU(inplace=True),
-                                        nn.Linear(local_config.contrast.proj_dim, local_config.contrast.proj_dim)
-                                        )
+        self.graph_proj = nn.Sequential(
+            nn.Linear(local_config.structure_encoder.output_dim, local_config.contrast.proj_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(local_config.contrast.proj_dim, local_config.contrast.proj_dim)
+            )
 
         self.init_weights()  # Warning! This is NOT training BERT from scratch
 
@@ -634,10 +640,11 @@ class GraphContrast(BertAndGraphModel):
             logits = self.classifier(torch.cat([pooled_cls_embed, contrast_output], dim=1))  # [bert, gnn]
         else:
             logits = self.classifier(pooled_cls_embed)  # bert
-
+        debug(self.multi_label)
         if labels is not None:
             if self.training:
                 if not self.multi_label:
+
                     loss_fct = CrossEntropyLoss()
                     target = labels.view(-1)
                 else:

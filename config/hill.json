@@ -1,12 +1,12 @@
 {
   "structure_encoder": {
-    "output_dim": 768,
+    "output_dim": 512,
     "link_input": false,
     "drop_root": false,
     "trans_dp": 0.1
   },
   "contrast": {
-    "proj_dim": 768,
+    "proj_dim": 512,
     "tau": 1.0
   },
   "train": {
@@ -18,7 +18,7 @@
     "warmup_steps": 2000
   },
   "device_setting": {
-    "device": "cuda",
+    "device": "cpu",
     "num_workers": 8
   }
 }

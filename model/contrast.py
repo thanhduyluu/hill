@@ -6,18 +6,23 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
-
-from transformers import AutoTokenizer
-from transformers.models.bert.modeling_bert import BertPreTrainedModel, BertEncoder
-from transformers.file_utils import ModelOutput
-from transformers import BertModel
-
-from torch_geometric.utils import to_dense_adj
 from torch_geometric.loader import DataLoader
+from torch_geometric.utils import to_dense_adj
+from transformers import AutoTokenizer, T5PreTrainedModel, T5EncoderModel
+from transformers import BertModel
+from sentence_transformers import SentenceTransformer
+from transformers.file_utils import ModelOutput
+from transformers.models.bert.modeling_bert import BertPreTrainedModel, BertEncoder
 
+from model.coding_tree import get_tree_data
 from model.graph import GraphEncoder
 from model.hill import HRLEncoder, GTData, GNNEncoder
-from model.coding_tree import get_tree_data
+
+
+def debug(message):
+    print("DEBUG", "=" * 30)
+    print(message)
+    print("DEBUG", "=" * 30)
 
 
 class BertPoolingLayer(nn.Module):
@@ -147,7 +152,6 @@ class ContrastEmbeddings(nn.Module):
 
 
 class ContrastBertModel(BertPreTrainedModel):
-
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__
@@ -301,15 +305,16 @@ class ContrastBertModel(BertPreTrainedModel):
         )
 
 
-class BertAndGraphModel(BertPreTrainedModel):
+class BertAndGraphModel(T5PreTrainedModel):
     def __init__(self, config, local_config):
         super(BertAndGraphModel, self).__init__(config)
+        # print(config)
         self.config = config
         self.local_config = local_config
         self.num_labels = config.num_labels
         self.tokenizer = AutoTokenizer.from_pretrained(config.name_or_path)
-        self.text_drop = nn.Dropout(config.hidden_dropout_prob)
-        self.bert = BertModel(config)
+        self.text_drop = nn.Dropout(config.dropout_rate)
+        self.bert = T5EncoderModel(config)
         self.bert_pool = BertPoolingLayer('cls')
         self.structure_encoder = None
 
@@ -326,10 +331,10 @@ class BertAndGraphModel(BertPreTrainedModel):
         self.graph = GTData(x=None, edge_index=self.edge_list)
 
         self.trans_dup = nn.Sequential(nn.Linear(config.num_labels, config.num_labels),
-                                        nn.ReLU(inplace=True),
-                                        nn.Linear(config.num_labels, config.num_labels),
-                                        nn.Dropout(p=local_config.structure_encoder.trans_dp)
-                                     )
+                                       nn.ReLU(inplace=True),
+                                       nn.Linear(config.num_labels, config.num_labels),
+                                       nn.Dropout(p=local_config.structure_encoder.trans_dp)
+                                       )
         # For label attention
         if hasattr(local_config, "label") and local_config.label:
             self.label_type = local_config.label_type
@@ -341,7 +346,8 @@ class BertAndGraphModel(BertPreTrainedModel):
             self.label_name = self.tokenizer(self.label_name, padding='longest')['input_ids']
             self.label_name = nn.Parameter(torch.tensor(self.label_name, dtype=torch.long), requires_grad=False)
 
-            self.attn = FusionLayer1(config, local_config)
+            # self.attn = FusionLayer1(config, local_config)
+            self.attn = None
             self.label_embeddings = nn.Embedding(config.num_labels, config.hidden_size)
 
             self.trans_proj = nn.Sequential(nn.Linear(config.hidden_size, config.hidden_size),
@@ -351,10 +357,10 @@ class BertAndGraphModel(BertPreTrainedModel):
                                             )
         else:
             self.trans_proj = nn.Sequential(nn.Linear(config.hidden_size, local_config.hidden_dim),
-                                       nn.ReLU(inplace=True),
-                                       nn.Linear(local_config.hidden_dim, local_config.hidden_dim),
-                                       nn.Dropout(p=local_config.structure_encoder.trans_dp)
-                                       )
+                                            nn.ReLU(inplace=True),
+                                            nn.Linear(local_config.hidden_dim, local_config.hidden_dim),
+                                            nn.Dropout(p=local_config.structure_encoder.trans_dp)
+                                            )
         self.init_weights()
 
     def batch_duplicate(self, text_embeds, repeats=None):
@@ -413,7 +419,7 @@ class BertAndGraphModel(BertPreTrainedModel):
         # You can unfreeze the last layer of bert by calling set_trainable(model.bert.encoder.layer[23], True)
         """
         self.__set_trainable(self.bert, False)
-        for i in range(start_layer, end_layer+1):
+        for i in range(start_layer, end_layer + 1):
             self.__set_trainable(self.bert.encoder.layer[i], True)
         if self.bert.pooler is not None:
             self.__set_trainable(self.bert.pooler, pooler)
@@ -431,7 +437,7 @@ class BertAndCodingTreeModel(BertAndGraphModel):
         adj = to_dense_adj(self.edge_list, max_num_nodes=self.num_labels).squeeze(0)
         nodeSize, edgeSize, edgeMat = get_tree_data(adj, self.local_config.tree_depth)
         tree.treeNodeSize = torch.LongTensor(nodeSize).view(1, -1)
-        for layer in range(1, self.local_config.tree_depth+1):
+        for layer in range(1, self.local_config.tree_depth + 1):
             tree['treePHLayer%s' % layer] = torch.ones([nodeSize[layer], 1])  # place holder
             tree['treeEdgeMatLayer%s' % layer] = torch.LongTensor(edgeMat[layer]).T
         fb_keys = [key for key in tree.keys() if key.find('treePHLayer') >= 0]
@@ -439,6 +445,7 @@ class BertAndCodingTreeModel(BertAndGraphModel):
 
     def align_tree(self, embeds, batch_size):
         batch_tree = [copy.deepcopy(self.tree) for _ in range(batch_size)]
+        debug(self.tree)
         for i in range(batch_size):
             batch_tree[i].x = embeds[i]
         return batch_tree
@@ -490,8 +497,8 @@ class StructureContrast(BertAndCodingTreeModel):
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
+            # token_type_ids=token_type_ids,
+            # position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -503,13 +510,15 @@ class StructureContrast(BertAndCodingTreeModel):
         pooled_cls_embed = self.text_drop(self.bert_pool(hidden_states))
 
         batch_size = hidden_states.shape[0]
-
+        debug(hidden_states.shape)
         loss = 0
         contrast_logits = None
-
         text_embeds = self.batch_duplicate(pooled_cls_embed)
+        debug(text_embeds.shape)
         batch_tree = self.align_tree(text_embeds, batch_size)
+        debug(len(batch_tree))
         tree_loader = DataLoader(batch_tree, batch_size=batch_size, follow_batch=self.fb_keys)
+        debug(tree_loader)
         contrast_output = self.structure_encoder(next(iter(tree_loader)))
 
         if self.output_type == 'tree':
@@ -533,7 +542,7 @@ class StructureContrast(BertAndCodingTreeModel):
                     loss += loss_fct(logits.view(-1, self.num_labels), target)
                 if self.contrast_loss:
                     contrastive_loss = self.contrastive_lossfct(
-                        torch.cat([self.text_proj(pooled_cls_embed), self.tree_proj(contrast_output)], dim=0),)
+                        torch.cat([self.text_proj(pooled_cls_embed), self.tree_proj(contrast_output)], dim=0), )
                     loss += contrastive_loss * self.lamda
 
         if not return_dict:
@@ -547,6 +556,7 @@ class StructureContrast(BertAndCodingTreeModel):
             'attentions': outputs.attentions,
             'contrast_logits': contrast_logits,
         }
+
 
 class GraphContrast(BertAndGraphModel):
     def __init__(self, config, local_config):
@@ -653,6 +663,7 @@ class GraphContrast(BertAndGraphModel):
             'contrast_logits': contrast_logits,
         }
 
+
 class ContrastModel(BertPreTrainedModel):
     def __init__(self, config, local_config):
         """
@@ -756,8 +767,7 @@ class ContrastModel(BertPreTrainedModel):
                 contrastive_loss = self.contrastive_lossfct(
                     torch.cat([pooled_output, contrast_sequence_output], dim=0), )
 
-                loss += loss_fct(contrast_logits.view(-1, self.num_labels), target) \
-
+                loss += loss_fct(contrast_logits.view(-1, self.num_labels), target)
             if contrastive_loss is not None and self.contrast_loss:
                 loss += contrastive_loss * self.lamb
 

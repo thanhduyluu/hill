@@ -1,6 +1,5 @@
-import time
-
 from transformers import AutoTokenizer
+
 '''
 Suggested version==0.10.2  
 When using Windows, please make sure you have installed MSVC Redistributable and SDK before installing fairseq from source.
@@ -19,7 +18,14 @@ import time
 import datetime
 
 import warnings
+
 warnings.filterwarnings('ignore')
+
+
+def debug(message):
+    print("DEBUG", "=" * 30)
+    print(message)
+    print("DEBUG", "=" * 30)
 
 
 class BertDataset(Dataset):
@@ -120,7 +126,7 @@ def params_and_time(config, train_set, test_set, num_epochs=20):
     with torch.no_grad():
         for data, label, idx in test_set:
             padding_mask = data != tokenizer.pad_token_id
-            _ = model(data, padding_mask, return_dict=True,)
+            _ = model(data, padding_mask, return_dict=True, )
     inf_time = time.time() - begin_time
     print("Inference time: {} secs".format(inf_time))
 
@@ -163,7 +169,7 @@ def run_train(config, train_set, dev_set):
         import wandb
         wandb.init(config=config, project='htc')
         wandb.watch(model)
-
+    debug(model)
     train_set = DataLoader(train_set, batch_size=config.batch_size, shuffle=True, collate_fn=dataset.collate_fn)
     dev_set = DataLoader(dev_set, batch_size=config.batch_size, shuffle=False, collate_fn=dataset.collate_fn)
 
@@ -210,7 +216,7 @@ def run_train(config, train_set, dev_set):
             torch.cuda.empty_cache()  # For nyt batch=24
             est = time.time() - t
             es = est * current_step
-            print(f"Step: {total_step - current_step}/{total_step} Epoch: {epoch}/{config.train.epoch}, Train: {index}/{len(train_set)}, Loss: {float(output['loss'])} -- Estimate time: {datetime.timedelta(seconds=int(es*1.3))}, Current time:{datetime.datetime.now()}")
+            print(f"Step: {total_step - current_step}/{total_step} Epoch: {epoch}/{config.train.epoch}, Train: {index}/{len(train_set)}, Loss: {float(output['loss'])} -- Estimate time: {datetime.timedelta(seconds=int(es * 1.3))}, Current time:{datetime.datetime.now()}")
         loss = loss / len(train_set) * config.batch_size
         if args.wandb:
             wandb.log({'train_loss': loss})
@@ -267,7 +273,8 @@ if __name__ == '__main__':
     config = utils.Configure(config_json_file=os.path.join(args.cfg_dir, args.model_name + '.json'))
 
     # bert_file = "/YOUR_BERT_DIR/bert-base-uncased"  # For offline.
-    bert_file = 'bert-base-uncased'  # For online.
+    bert_file = 'google-t5/t5-small'  # For online.
+    # bert_file = 'bert-base-uncased'  # For online.
     tokenizer = AutoTokenizer.from_pretrained(bert_file)
     data_path = os.path.join(args.data_dir, args.dataset)
     label_dict = torch.load(os.path.join(data_path, 'bert_value_dict.pt'))
@@ -281,6 +288,7 @@ if __name__ == '__main__':
     }
     device = config.device_setting.device
     dataset = BertDataset(device=device, pad_idx=tokenizer.pad_token_id, data_path=data_path)
+    debug(dataset)
     split = torch.load(os.path.join(data_path, 'split.pt'))
 
     train = Subset(dataset, split['train'])
@@ -305,4 +313,3 @@ if __name__ == '__main__':
                                     args.lamda)
 
     run_once(config, train, dev, test)
-

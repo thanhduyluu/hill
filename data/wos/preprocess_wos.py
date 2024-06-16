@@ -8,9 +8,10 @@ import re
 WoS Reference: https://github.com/kk7nc/HDLTex
 """
 
-FILE_DIR = './Data.txt'
+FILE_DIR = './Data300.txt'
 total_len = []
 np.random.seed(7)
+len_data = 0
 
 english_stopwords = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', "you're", "you've", "you'll",
                      "you'd", 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', "she's",
@@ -70,7 +71,9 @@ def get_data_from_meta():
     f.close()
     data = []
     label_check = {}
-    for line in origin_txt[1:]:
+    global len_data
+    len_data = len(origin_txt)
+    for line in origin_txt:
         line = line.rstrip('\n')
         line = line.split('\t')
         assert len(line) == 7
@@ -119,10 +122,11 @@ def get_data_from_meta():
 
 
 def split_train_dev_test():
+    global len_data
     f = open('wos_total.json', 'r')
     data = f.readlines()
     f.close()
-    id = [i for i in range(46984)]
+    id = [i for i in range(len_data)]
     np_data = np.array(data)
     np.random.shuffle(id)
     np_data = np_data[id]

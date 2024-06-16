@@ -11,7 +11,9 @@ from collections import defaultdict
 np.random.seed(7)
 
 if __name__ == '__main__':
-    tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+    model = 'all-mpnet-base-v2'
+    # model = 'bert-base-uncased'
+    tokenizer = AutoTokenizer.from_pretrained(model)
     source = []
     labels = []
     label_ids = []
